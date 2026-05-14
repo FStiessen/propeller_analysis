@@ -1,16 +1,36 @@
 import os
 import subprocess
 import numpy as np
-from scipy.interpolate import interp1d
+from scipy.optimize import brentq
 
 
 class bemt:
     def __init__(self, prop, V, Omega, mu, rho):
+        self.R = prop.R
+        self.N_b = prop.N_b
         self.V = V
+        self.r = prop.r
+        self.pitch = prop.pitch
         self.Omega = Omega
         self.mu = mu
         self.rho = rho
         self.Re = self.rho*(self.V**2 + (self.Omega*prop.r)**2)**0.5*prop.c/self.mu
+        self.lambda_r = self.Omega*prop.r/self.V
+        self.sigma_prime = prop.N_b*prop.c/(2*np.pi*prop.r)
+
+    def generate_polars_simple(self):
+        alpha = np.linspace(-180, 180, 361)
+        alpha_rad = np.radians(alpha)
+        A_1 = 0.5
+        B_1 = 2
+
+        cl = A_1*np.sin(2*alpha_rad)
+        cd = B_1*np.sin(alpha_rad)**2
+
+        extrapolated_polar_array = np.column_stack((alpha, cl, cd))
+        self.af_polars_extrap = []
+        for idx in range(len(self.r)):
+            self.af_polars_extrap.append(extrapolated_polar_array)
 
     def generate_polars(self, alpha_min, alpha_max, dalpha, N_crit):
         """Generate lift and drag polars for all airfoils in output/airfoils using xfoil."""
@@ -150,24 +170,140 @@ QUIT
                 A_1 = 0.5
                 A_2_min = (cl_min - A_1*np.sin(2*np.radians(a_min)))*np.sin(np.radians(a_min))/np.cos(np.radians(a_min))**2
                 A_2_max = (cl_max - A_1*np.sin(2*np.radians(a_max)))*np.sin(np.radians(a_max))/np.cos(np.radians(a_max))**2
-                cl = np.zeros_like(alpha)
-                cl = (np.where(abs(alpha) >= 90, A_1*np.sin(2*alpha_rad),
-                      np.where((-90 < alpha) & (alpha < a_min), A_1*np.sin(2*alpha_rad) + A_2_min*np.cos(alpha_rad)**2/np.sin(alpha_rad),
-                      np.where((90 > alpha) & (alpha > a_max), A_1*np.sin(2*alpha_rad) + A_2_max*np.cos(alpha_rad)**2/np.sin(alpha_rad),
-                      np.where((alpha >= a_min) & (alpha <= a_max), np.interp(alpha, alpha_raw, cl_raw), cl)))))
 
                 cd_min = cd_raw[0]
                 cd_max = cd_raw[-1]
                 B_1 = 2
                 B_2_min = (cd_min - B_1*np.sin(np.radians(a_min))**2)/np.cos(np.radians(a_min))
                 B_2_max = (cd_max - B_1*np.sin(np.radians(a_max))**2)/np.cos(np.radians(a_max))
-                cd = np.zeros_like(alpha)
-                cd = (np.where(abs(alpha) >= 90, B_1*np.sin(alpha_rad)**2,
-                      np.where((-90 < alpha) & (alpha < a_min), B_1*np.sin(alpha_rad)**2 + B_2_min*np.cos(alpha_rad),
-                      np.where((90 > alpha) & (alpha > a_max), B_1*np.sin(alpha_rad)**2 + B_2_max*np.cos(alpha_rad),
-                      np.where((alpha >= a_min) & (alpha <= a_max), np.interp(alpha, alpha_raw, cd_raw), cd)))))
 
-                polar_array = np.column_stack((alpha, cl, cd))
-                return polar_array
+                # Shared conditions for cl and cd
+                conditions = [
+                    abs(alpha) >= 90,
+                    (-90 < alpha) & (alpha < a_min),
+                    (90 > alpha) & (alpha > a_max),
+                    (alpha >= a_min) & (alpha <= a_max)
+                ]
+
+                # Choices for cl
+                cl_choices = [
+                    A_1*np.sin(2*alpha_rad),
+                    A_1*np.sin(2*alpha_rad) + A_2_min*np.cos(alpha_rad)**2/np.sin(alpha_rad),
+                    A_1*np.sin(2*alpha_rad) + A_2_max*np.cos(alpha_rad)**2/np.sin(alpha_rad),
+                    np.interp(alpha, alpha_raw, cl_raw)
+                ]
+                cl = np.select(conditions, cl_choices, default=0)
+
+                # Choices for cd
+                cd_choices = [
+                    B_1*np.sin(alpha_rad)**2,
+                    B_1*np.sin(alpha_rad)**2 + B_2_min*np.cos(alpha_rad),
+                    B_1*np.sin(alpha_rad)**2 + B_2_max*np.cos(alpha_rad),
+                    np.interp(alpha, alpha_raw, cd_raw)
+                ]
+                cd = np.select(conditions, cd_choices, default=0)
+
+                #cl = np.flip(cl)
+                #cl = np.flip(cd)
+                extrapolated_polar_array = np.column_stack((alpha, cl, cd))
+                return extrapolated_polar_array
 
             self.af_polars_extrap.append(extrapolation_fun(polar_array))
+
+    def method_ning(self):
+
+        def alpha_fun(phi, i):
+            return (
+                phi - self.pitch[i]
+            )
+
+        def c_n(phi, i):
+            alpha = alpha_fun(phi, i)
+            alpha_raw = np.radians(self.af_polars_extrap[i][:, 0])
+            cl_raw = self.af_polars_extrap[i][:, 1]
+            cd_raw = self.af_polars_extrap[i][:, 2]
+            cl = np.interp(alpha, alpha_raw, cl_raw)
+            cd = np.interp(alpha, alpha_raw, cd_raw)
+            return cl*np.cos(phi) - cd*np.sin(phi)
+
+        def c_t(phi, i):
+            alpha = alpha_fun(phi, i)
+            alpha_raw = np.radians(self.af_polars_extrap[i][:, 0])
+            cl_raw = self.af_polars_extrap[i][:, 1]
+            cd_raw = self.af_polars_extrap[i][:, 2]
+            cl = np.interp(alpha, alpha_raw, cl_raw)
+            cd = np.interp(alpha, alpha_raw, cd_raw)
+            return cl*np.sin(phi) + cd*np.cos(phi)
+
+        def F(phi, i):
+            f_tip = self.N_b/2*(self.R - self.r[i])/(self.r[i]*abs(np.sin(phi)))
+            F_tip = 2/np.pi*np.arccos(np.exp(-f_tip))
+            return F_tip
+
+        def kappa(phi, i):
+            return (
+                self.sigma_prime[i]*c_n(phi, i)/(4*F(phi, i)*np.sin(phi)**2)
+            )
+
+        def kappa_prime(phi, i):
+            return (
+                self.sigma_prime[i]*c_t(phi, i)/(4*F(phi, i)*np.sin(phi)*np.cos(phi))
+            )
+
+        def gamma_1(phi, i):
+            return (
+                2*F(phi, i)*kappa(phi, i) - (10/9 - F(phi, i))
+            )
+
+        def gamma_2(phi, i):
+            return (
+                2*F(phi, i)*kappa(phi, i) - F(phi, i)*(4/3 - F(phi, i))
+            )
+
+        def gamma_3(phi, i):
+            return (
+                2*F(phi, i)*kappa(phi, i) - (25/9 - 2*F(phi, i))
+            )
+
+        def a(phi, i):
+            if kappa(phi, i) < 2/3:
+                return kappa(phi, i)/(1 + kappa(phi, i))
+            else:
+                return (gamma_1(phi, i) - gamma_2(phi, i)**0.5)/gamma_3(phi, i)
+
+        #def a_prime(phi, i):
+        #    return kappa_prime(phi, i)/(1 + kappa_prime(phi, i))
+
+        def f(phi, i):
+            return (
+                np.sin(phi)/(1 - a(phi, i)) - np.cos(phi)*(1 - kappa_prime(phi, i))/self.lambda_r[i]
+            )
+
+        def f_PB(phi, i):
+            return (
+                np.sin(phi)*(1 - kappa(phi, i)) - np.cos(phi)*(1 - kappa_prime(phi, i))/self.lambda_r[i]
+            )
+
+        def c_thrust(phi, i):
+            return (
+                ((1 - a(phi, i))/np.sin(phi))**2*c_n(phi, i)*self.sigma_prime[i]
+            )
+
+        self.phi_sol = np.zeros_like(self.pitch)
+        self.alpha_sol = np.zeros_like(self.pitch)
+        self.c_thrust_sol = np.zeros_like(self.pitch)
+        for idx in range(len(self.pitch)):
+            epsilon = 1e-6
+            if f(np.pi/2, idx) > 0:
+                g = lambda x: f(x, idx)
+                phi_sol_i = brentq(g, epsilon, np.pi/2)
+            elif (f_PB(-np.pi/4, idx) < 0) & (f_PB(epsilon, idx) > 0):
+                g = lambda x: f_PB(x, idx)
+                phi_sol_i = brentq(g, -np.pi/4, -epsilon)
+            else:
+                g = lambda x: f(x, idx)
+                phi_sol_i = brentq(g, np.pi/2, np.pi)
+            self.phi_sol[idx] = phi_sol_i
+            self.alpha_sol[idx] = alpha_fun(phi_sol_i, idx)
+            self.c_thrust_sol[idx] = c_thrust(phi_sol_i, idx)
+        #print(phi_sol)
