@@ -1,3 +1,4 @@
+import os
 import numpy as np
 from scipy.interpolate import interp1d
 
@@ -69,8 +70,16 @@ class propeller:
             self.af_data[af] = np.vstack((x_new, y_new))
 
         # blend airfoils
+        airfoil_output_dir = os.path.join('output', 'airfoils')
+        os.makedirs(airfoil_output_dir, exist_ok=True)
+        for entry in os.listdir(airfoil_output_dir):
+            path = os.path.join(airfoil_output_dir, entry)
+            if os.path.isfile(path):
+                os.remove(path)
+
         self.af_r = []
-        for r_val in self.r:
+        for idx_r in range(N_spanwise):
+            r_val = self.r[idx_r]
             idx_above = np.searchsorted(self.r_raw, r_val, side='left')
             idx_below = idx_above - 1
 
@@ -88,3 +97,9 @@ class propeller:
                 k = (1 + np.cos(xi*np.pi))/2
                 af_blended = k*af_below + (1 - k)*af_above
             self.af_r.append(af_blended)
+
+            filename = f"output/airfoils/af_{idx_r}.dat"
+            np.savetxt(filename,
+                       af_blended.T,
+                       fmt="%.6f",
+                       comments="")
