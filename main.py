@@ -24,7 +24,7 @@ rho = 1.225
 V = 1e-3
 Omega = 3356/60*2*np.pi
 analysis = bemt(prop, V, Omega, mu, rho)
-#analysis.generate_polars(-10, 20, 1, 7)
+#analysis.generate_polars(0, 15, 1, 7)
 analysis.generate_polars_simple()
 analysis.method_ning()
 
@@ -58,7 +58,7 @@ print(f"Thrust: {thrust}")
 #plt.show()
 
 fig = plt.figure(figsize=(16, 9))
-plt.plot(prop.r, -analysis.c_thrust_sol*prop.r*rho*V**2*np.pi, linestyle='-', marker='x')
+plt.plot(prop.r, analysis.c_thrust_sol*prop.r*rho*V**2*np.pi, linestyle='-', marker='x')
 plt.xlabel(r"$r$")
 plt.ylabel(r"$dT/dr$")
 plt.grid(True)

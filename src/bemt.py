@@ -214,6 +214,81 @@ QUIT
 
         def alpha_fun(phi, i):
             return (
+                self.pitch[i] - phi
+            )
+
+        def c_n(phi, i):
+            alpha = alpha_fun(phi, i)
+            alpha_raw = np.radians(self.af_polars_extrap[i][:, 0])
+            cl_raw = self.af_polars_extrap[i][:, 1]
+            cd_raw = self.af_polars_extrap[i][:, 2]
+            cl = np.interp(alpha, alpha_raw, cl_raw)
+            cd = np.interp(alpha, alpha_raw, cd_raw)
+            return cl*np.cos(phi) - cd*np.sin(phi)
+
+        def c_t(phi, i):
+            alpha = alpha_fun(phi, i)
+            alpha_raw = np.radians(self.af_polars_extrap[i][:, 0])
+            cl_raw = self.af_polars_extrap[i][:, 1]
+            cd_raw = self.af_polars_extrap[i][:, 2]
+            cl = np.interp(alpha, alpha_raw, cl_raw)
+            cd = np.interp(alpha, alpha_raw, cd_raw)
+            return cl*np.sin(phi) + cd*np.cos(phi)
+
+        def F(phi, i):
+            f_tip = self.N_b/2*(self.R - self.r[i])/(self.r[i]*abs(np.sin(phi)))
+            F_tip = 2/np.pi*np.arccos(np.exp(-f_tip))
+            return F_tip
+
+        def kappa(phi, i):
+            return (
+                self.sigma_prime[i]*c_n(phi, i)/(4*F(phi, i)*np.sin(phi)**2)
+            )
+
+        def kappa_prime(phi, i):
+            return (
+                self.sigma_prime[i]*c_t(phi, i)/(4*F(phi, i)*np.sin(phi)*np.cos(phi))
+            )
+
+        def a(phi, i):
+            return kappa(phi, i)/(1 - kappa(phi, i))
+
+        def a_prime(phi, i):
+            return (
+                kappa_prime(phi, i)/(1 + kappa_prime(phi, i))
+            )
+
+        def f(phi, i):
+            a_val = a(phi, i)
+            ap_val = a_prime(phi, i)
+
+            return (
+                np.sin(phi)/(1 + a_val)
+                - np.cos(phi)/(self.lambda_r[i]*(1 - ap_val))
+            )
+
+        def c_thrust(phi, i):
+            return (
+                ((1 + a(phi, i))/np.sin(phi))**2
+                * c_n(phi, i)
+                * self.sigma_prime[i]
+            )
+
+        self.phi_sol = np.zeros_like(self.pitch)
+        self.alpha_sol = np.zeros_like(self.pitch)
+        self.c_thrust_sol = np.zeros_like(self.pitch)
+        for idx in range(len(self.pitch)):
+            epsilon = 1e-6
+            g = lambda x: f(x, idx)
+            phi_sol_i = brentq(g, epsilon, np.pi/2 - epsilon)
+            self.phi_sol[idx] = phi_sol_i
+            self.alpha_sol[idx] = alpha_fun(phi_sol_i, idx)
+            self.c_thrust_sol[idx] = c_thrust(phi_sol_i, idx)
+
+    def method_ning_2(self):
+
+        def alpha_fun(phi, i):
+            return (
                 phi - self.pitch[i]
             )
 
@@ -271,8 +346,10 @@ QUIT
             else:
                 return (gamma_1(phi, i) - gamma_2(phi, i)**0.5)/gamma_3(phi, i)
 
-        #def a_prime(phi, i):
-        #    return kappa_prime(phi, i)/(1 + kappa_prime(phi, i))
+        def a_prime(phi, i):
+            return (
+                kappa_prime(phi, i)/(1 + kappa_prime(phi, i))
+            )
 
         def f(phi, i):
             return (
@@ -306,4 +383,3 @@ QUIT
             self.phi_sol[idx] = phi_sol_i
             self.alpha_sol[idx] = alpha_fun(phi_sol_i, idx)
             self.c_thrust_sol[idx] = c_thrust(phi_sol_i, idx)
-        #print(phi_sol)
