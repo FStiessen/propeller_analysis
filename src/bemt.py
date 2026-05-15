@@ -5,16 +5,18 @@ from scipy.optimize import brentq
 
 
 class bemt:
-    def __init__(self, prop, V, Omega, mu, rho):
+    def __init__(self, prop, V, Omega, feather, mu, rho, c_sound):
         self.R = prop.R
         self.N_b = prop.N_b
         self.V = V
         self.r = prop.r
-        self.pitch = prop.pitch
+        self.pitch = prop.pitch + np.radians(feather)
+        self.c_sound = c_sound
         self.Omega = Omega
         self.mu = mu
         self.rho = rho
         self.Re = self.rho*(self.V**2 + (self.Omega*prop.r)**2)**0.5*prop.c/self.mu
+        self.M = (self.V**2 + (self.Omega*prop.r)**2)**0.5/c_sound
         self.lambda_r = self.Omega*prop.r/self.V
         self.sigma_prime = prop.N_b*prop.c/(2*np.pi*prop.r)
 
@@ -58,8 +60,8 @@ class bemt:
             print(f"xfoil executable not found at {xfoil_exe}")
             return
 
-        self.af_polars = []
-        self.af_polars_extrap = []
+        self.af_polars = [None]*len(self.r)
+        self.af_polars_extrap = [None]*len(self.r)
 
         for af_file in airfoil_files:
             af_path = os.path.abspath(os.path.join(airfoil_dir, af_file))
@@ -68,6 +70,7 @@ class bemt:
             # Extract spanwise index from filename (e.g., af_0.dat -> idx_r = 0)
             idx_r = int(af_name.split('_')[1])
             Re = int(round(self.Re[idx_r]))
+            Mach = self.M[idx_r]
 
             output_file = os.path.abspath(os.path.join(polars_dir, af_name))
             af_path_xfoil = af_path.replace('\\', '/')
@@ -85,6 +88,7 @@ PANE
 OPER
 VISC
 {Re}
+MACH {Mach}
 VPAR
 N {N_crit}
 
@@ -142,7 +146,7 @@ QUIT
 
                         # Store as structured array with alpha, cl, cd columns
                         polar_array = np.column_stack((alpha, cl, cd))
-                        self.af_polars.append(polar_array)
+                        self.af_polars[idx_r] = polar_array
 
                         print(f"  → Stored polar data for {af_name}")
                     except Exception as e:
@@ -208,9 +212,10 @@ QUIT
                 extrapolated_polar_array = np.column_stack((alpha, cl, cd))
                 return extrapolated_polar_array
 
-            self.af_polars_extrap.append(extrapolation_fun(polar_array))
+            self.af_polars_extrap[idx_r] = extrapolation_fun(self.af_polars[idx_r])
 
     def method_ning(self):
+        self.epsilon = 1e-6
 
         def alpha_fun(phi, i):
             return (
@@ -236,9 +241,10 @@ QUIT
             return cl*np.sin(phi) + cd*np.cos(phi)
 
         def F(phi, i):
-            f_tip = self.N_b/2*(self.R - self.r[i])/(self.r[i]*abs(np.sin(phi)))
-            F_tip = 2/np.pi*np.arccos(np.exp(-f_tip))
-            return F_tip
+            sin_phi = max(abs(np.sin(phi)), self.epsilon)
+            f_tip = self.N_b/2*(self.R - self.r[i])/(self.r[i]*sin_phi)
+            F_tip = 2/np.pi * np.arccos(np.exp(-f_tip))
+            return np.clip(F_tip, self.epsilon, 1.0)
 
         def kappa(phi, i):
             return (
@@ -251,7 +257,8 @@ QUIT
             )
 
         def a(phi, i):
-            return kappa(phi, i)/(1 - kappa(phi, i))
+            k = kappa(phi, i)
+            return k/(1 - k)
 
         def a_prime(phi, i):
             return (
@@ -274,16 +281,24 @@ QUIT
                 * self.sigma_prime[i]
             )
 
+        def c_drag(phi, i):
+            return (
+                ((1 + a(phi, i))/np.sin(phi))**2
+                * c_t(phi, i)
+                * self.sigma_prime[i]
+            )
+
         self.phi_sol = np.zeros_like(self.pitch)
         self.alpha_sol = np.zeros_like(self.pitch)
         self.c_thrust_sol = np.zeros_like(self.pitch)
+        self.c_drag_sol = np.zeros_like(self.pitch)
         for idx in range(len(self.pitch)):
-            epsilon = 1e-6
             g = lambda x: f(x, idx)
-            phi_sol_i = brentq(g, epsilon, np.pi/2 - epsilon)
+            phi_sol_i = brentq(g, self.epsilon, np.pi/2 - self.epsilon)
             self.phi_sol[idx] = phi_sol_i
             self.alpha_sol[idx] = alpha_fun(phi_sol_i, idx)
             self.c_thrust_sol[idx] = c_thrust(phi_sol_i, idx)
+            self.c_drag_sol[idx] = c_drag(phi_sol_i, idx)
 
     def method_ning_2(self):
 
