@@ -23,8 +23,8 @@ class propeller:
 
     def discretise(self, N_spanwise, spacing, type, N_chordwise, type_c):
         xi_s = np.linspace(0, 1, N_spanwise)
-        r_1 = self.r_raw[0]*1.0001
-        r_2 = self.R*0.999
+        r_1 = self.r_raw[0]
+        r_2 = self.R
         if spacing == 'cosine':
             xi_s = (1 - np.cos(xi_s*np.pi))/2
             print('cosine')
@@ -78,6 +78,8 @@ class propeller:
                 os.remove(path)
 
         self.af_r = []
+        self.areas = np.zeros_like(self.r)
+        self.centroids = []
         for idx_r in range(N_spanwise):
             r_val = self.r[idx_r]
             idx_above = np.searchsorted(self.r_raw, r_val, side='left')
@@ -97,6 +99,26 @@ class propeller:
                 k = (1 + np.cos(xi*np.pi))/2
                 af_blended = k*af_below + (1 - k)*af_above
             self.af_r.append(af_blended)
+
+            def airfoil_centroid(af_coords):
+                # shoelace formula for polygon area and centroid
+                x = af_coords[0, :]
+                y = af_coords[1, :]
+                x1 = np.roll(x, -1)
+                y1 = np.roll(y, -1)
+
+                cross = x*y1 - x1*y
+                A = 0.5*np.sum(cross)         # signed polygon area
+                if A == 0:
+                    raise ValueError("Degenerate airfoil polygon")
+                Cx = np.sum((x + x1)*cross)/(6*A)
+                Cy = np.sum((y + y1)*cross)/(6*A)
+
+                return abs(A), np.array([Cx, Cy])
+
+            area, centroid = airfoil_centroid(af_blended)
+            self.areas[idx_r] = area*self.c[idx_r]**2
+            self.centroids.append(centroid*self.c[idx_r])
 
             filename = f"output/airfoils/af_{idx_r}.dat"
             np.savetxt(filename,

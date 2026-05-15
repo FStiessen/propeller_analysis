@@ -244,7 +244,9 @@ QUIT
             sin_phi = max(abs(np.sin(phi)), self.epsilon)
             f_tip = self.N_b/2*(self.R - self.r[i])/(self.r[i]*sin_phi)
             F_tip = 2/np.pi * np.arccos(np.exp(-f_tip))
-            return np.clip(F_tip, self.epsilon, 1.0)
+            f_hub = self.N_b/2*(self.r[i] - self.r[0])/(self.r[i]*sin_phi)
+            F_hub = 2/np.pi * np.arccos(np.exp(-f_hub))
+            return np.clip(F_tip*F_hub, self.epsilon, 1.0)
 
         def kappa(phi, i):
             return (
@@ -292,13 +294,18 @@ QUIT
         self.alpha_sol = np.zeros_like(self.pitch)
         self.c_thrust_sol = np.zeros_like(self.pitch)
         self.c_drag_sol = np.zeros_like(self.pitch)
-        for idx in range(len(self.pitch)):
+        for idx in range(1, len(self.pitch) - 1):
             g = lambda x: f(x, idx)
             phi_sol_i = brentq(g, self.epsilon, np.pi/2 - self.epsilon)
             self.phi_sol[idx] = phi_sol_i
             self.alpha_sol[idx] = alpha_fun(phi_sol_i, idx)
             self.c_thrust_sol[idx] = c_thrust(phi_sol_i, idx)
             self.c_drag_sol[idx] = c_drag(phi_sol_i, idx)
+
+        self.dTdr = self.c_thrust_sol*self.r*self.rho*self.V**2*np.pi
+        self.dDdr = self.c_drag_sol*self.r*self.rho*self.V**2*np.pi
+        self.p_n = self.dTdr/self.N_b
+        self.p_t = self.dDdr/self.N_b
 
     def method_ning_2(self):
 
