@@ -164,48 +164,53 @@ QUIT
             def extrapolation_fun(data_raw):
                 alpha = np.linspace(-180, 180, 361)
                 alpha_rad = np.radians(alpha)
-                alpha_raw = data_raw[:, 0]
-                cl_raw = data_raw[:, 1]
-                cd_raw = data_raw[:, 2]
-                a_min = alpha_raw[0]
-                a_max = alpha_raw[-1]
-                cl_min = cl_raw[0]
-                cl_max = cl_raw[-1]
                 A_1 = 0.5
-                A_2_min = (cl_min - A_1*np.sin(2*np.radians(a_min)))*np.sin(np.radians(a_min))/np.cos(np.radians(a_min))**2
-                A_2_max = (cl_max - A_1*np.sin(2*np.radians(a_max)))*np.sin(np.radians(a_max))/np.cos(np.radians(a_max))**2
-
-                cd_min = cd_raw[0]
-                cd_max = cd_raw[-1]
                 B_1 = 2
-                B_2_min = (cd_min - B_1*np.sin(np.radians(a_min))**2)/np.cos(np.radians(a_min))
-                B_2_max = (cd_max - B_1*np.sin(np.radians(a_max))**2)/np.cos(np.radians(a_max))
+                try:
+                    alpha_raw = data_raw[:, 0]
+                    cl_raw = data_raw[:, 1]
+                    cd_raw = data_raw[:, 2]
+                    a_min = alpha_raw[0]
+                    a_max = alpha_raw[-1]
+                    cl_min = cl_raw[0]
+                    cl_max = cl_raw[-1]
+                    A_2_min = (cl_min - A_1*np.sin(2*np.radians(a_min)))*np.sin(np.radians(a_min))/np.cos(np.radians(a_min))**2
+                    A_2_max = (cl_max - A_1*np.sin(2*np.radians(a_max)))*np.sin(np.radians(a_max))/np.cos(np.radians(a_max))**2
 
-                # Shared conditions for cl and cd
-                conditions = [
-                    abs(alpha) >= 90,
-                    (-90 < alpha) & (alpha < a_min),
-                    (90 > alpha) & (alpha > a_max),
-                    (alpha >= a_min) & (alpha <= a_max)
-                ]
+                    cd_min = cd_raw[0]
+                    cd_max = cd_raw[-1]
+                    B_2_min = (cd_min - B_1*np.sin(np.radians(a_min))**2)/np.cos(np.radians(a_min))
+                    B_2_max = (cd_max - B_1*np.sin(np.radians(a_max))**2)/np.cos(np.radians(a_max))
 
-                # Choices for cl
-                cl_choices = [
-                    A_1*np.sin(2*alpha_rad),
-                    A_1*np.sin(2*alpha_rad) + A_2_min*np.cos(alpha_rad)**2/np.sin(alpha_rad),
-                    A_1*np.sin(2*alpha_rad) + A_2_max*np.cos(alpha_rad)**2/np.sin(alpha_rad),
-                    np.interp(alpha, alpha_raw, cl_raw)
-                ]
-                cl = np.select(conditions, cl_choices, default=0)
+                    # Shared conditions for cl and cd
+                    conditions = [
+                        abs(alpha) >= 90,
+                        (-90 < alpha) & (alpha < a_min),
+                        (90 > alpha) & (alpha > a_max),
+                        (alpha >= a_min) & (alpha <= a_max)
+                    ]
 
-                # Choices for cd
-                cd_choices = [
-                    B_1*np.sin(alpha_rad)**2,
-                    B_1*np.sin(alpha_rad)**2 + B_2_min*np.cos(alpha_rad),
-                    B_1*np.sin(alpha_rad)**2 + B_2_max*np.cos(alpha_rad),
-                    np.interp(alpha, alpha_raw, cd_raw)
-                ]
-                cd = np.select(conditions, cd_choices, default=0)
+                    # Choices for cl
+                    cl_choices = [
+                        A_1*np.sin(2*alpha_rad),
+                        A_1*np.sin(2*alpha_rad) + A_2_min*np.cos(alpha_rad)**2/np.sin(alpha_rad),
+                        A_1*np.sin(2*alpha_rad) + A_2_max*np.cos(alpha_rad)**2/np.sin(alpha_rad),
+                        np.interp(alpha, alpha_raw, cl_raw)
+                    ]
+                    cl = np.select(conditions, cl_choices, default=0)
+
+                    # Choices for cd
+                    cd_choices = [
+                        B_1*np.sin(alpha_rad)**2,
+                        B_1*np.sin(alpha_rad)**2 + B_2_min*np.cos(alpha_rad),
+                        B_1*np.sin(alpha_rad)**2 + B_2_max*np.cos(alpha_rad),
+                        np.interp(alpha, alpha_raw, cd_raw)
+                    ]
+                    cd = np.select(conditions, cd_choices, default=0)
+                except TypeError:
+                    cl = A_1*np.sin(2*alpha_rad)
+                    cd = B_1*np.sin(alpha_rad)**2
+                    print(f"Error: Polar data for {af_file} is incomplete. Using simple extrapolation.")
 
                 #cl = np.flip(cl)
                 #cl = np.flip(cd)
