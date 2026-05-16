@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from scipy.interpolate import interp1d
+from scipy.interpolate import CubicSpline, interp1d
 
 
 class propeller:
@@ -23,7 +23,7 @@ class propeller:
         self.af_raw = data['airfoil']
         self.thickness_raw = R*data['thickness']
 
-    def discretise(self, N_spanwise, spacing, type, N_chordwise, type_c):
+    def discretise(self, N_spanwise, spacing, type, N_chordwise, type_c, enforce_te_thickness, min_thickness):
         xi_s = np.linspace(0, 1, N_spanwise)
         r_1 = self.r_raw[0]
         r_2 = self.R
@@ -35,12 +35,19 @@ class propeller:
         else:
             raise ValueError('wrong type of spacing')
         self.r = r_1 + (r_2 - r_1)*xi_s
-        f = interp1d(self.r_raw, self.c_raw, kind=type)
-        self.c = f(self.r)
-        f = interp1d(self.r_raw, self.pitch_raw, kind=type)
-        self.pitch = f(self.r)
-        f = interp1d(self.r_raw, self.thickness_raw, kind=type)
-        self.thickness = f(self.r)
+        if type == 'cubic_spline':
+            f_c = CubicSpline(self.r_raw, self.c_raw)
+            f_p = CubicSpline(self.r_raw, self.pitch_raw)
+            f_t = CubicSpline(self.r_raw, self.thickness_raw)
+        elif type == 'linear':
+            f_c = interp1d(self.r_raw, self.c_raw, kind=type)
+            f_p = interp1d(self.r_raw, self.pitch_raw, kind=type)
+            f_t = interp1d(self.r_raw, self.thickness_raw, kind=type)
+        else:
+            raise ValueError('wrong type of interpolation')
+        self.c = f_c(self.r)
+        self.pitch = f_p(self.r)
+        self.thickness = f_t(self.r)
 
         # airfoil interpolation
         xi_c = np.linspace(0, 1, N_chordwise)
@@ -49,7 +56,6 @@ class propeller:
         # interpolate all unique airfoils to common discretisation
         af_files = np.unique(self.af_raw)
         self.af_data = dict()
-        self.af_base_thickness = dict()
         for af in af_files:
             if af == 'blended':
                 continue
@@ -67,12 +73,16 @@ class propeller:
             x_l_raw = x[idx_le:]
             y_l_raw = y[idx_le:]
 
-            f = interp1d(x_u_raw, y_u_raw, kind=type_c)
-            y_u = f(xi_c)
-            f = interp1d(x_l_raw, y_l_raw, kind=type_c)
-            y_l = f(xi_c)
-            self.af_base_thickness[af] = np.max(y_u - y_l)
-            print(f"Airfoil {af}: thickness = {self.af_base_thickness[af]:.3f}")
+            if type_c == 'cubic_spline':
+                f_u = CubicSpline(x_u_raw, y_u_raw)
+                f_l = CubicSpline(x_l_raw, y_l_raw)
+            elif type_c == 'linear':
+                f_u = interp1d(x_u_raw, y_u_raw, kind=type_c)
+                f_l = interp1d(x_l_raw, y_l_raw, kind=type_c)
+            else:
+                raise ValueError('wrong type of interpolation')
+            y_u = f_u(xi_c)
+            y_l = f_l(xi_c)
 
             y_new = np.concatenate((np.flip(y_u[1:]), y_l))
             x_new = np.concatenate((np.flip(xi_c[1:]), xi_c))
@@ -119,16 +129,21 @@ class propeller:
                 xi = (r_val - r_below)/(r_above - r_below)
                 k = (1 + np.cos(xi*np.pi))/2
                 af_blended = k*af_below + (1 - k)*af_above
+            y_u = np.flip(af_blended[1, :N_chordwise - 1])
+            y_l = af_blended[1, N_chordwise:]
+            thickness = y_u - y_l
+            max_thickness = np.max(thickness)
+            camber = (y_u + y_l)/2
             if self.thickness[idx_r] != 0:
-                y_u = np.flip(af_blended[1, :N_chordwise - 1])
-                y_l = af_blended[1, N_chordwise:]
-                thickness = y_u - y_l
-                max_thickness = np.max(thickness)
-                thickness_new = thickness/max_thickness*self.thickness[idx_r]*self.R/self.c[idx_r]
-                camber = (y_u + y_l)/2
-                y_u_new = camber + thickness_new/2
-                y_l_new = camber - thickness_new/2
-                af_blended[1, :] = np.concatenate([np.flip(y_u_new), np.array([0]), y_l_new])
+                thickness = thickness/max_thickness*self.thickness[idx_r]/self.c[idx_r]
+            if enforce_te_thickness:
+                x = af_blended[0, N_chordwise:]
+                te_thickness = thickness[-1]
+                mod = np.where(x >= 0.5, 4*(x - 0.5)**2*(min_thickness/self.c[idx_r] - te_thickness), 0)
+                thickness = thickness + mod
+            y_u_new = camber + thickness/2
+            y_l_new = camber - thickness/2
+            af_blended[1, :] = np.concatenate([np.flip(y_u_new), np.array([0]), y_l_new])
             self.af_r.append(af_blended)
 
             def airfoil_centroid(af_coords):

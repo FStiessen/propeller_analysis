@@ -13,15 +13,14 @@ from src.dynamics import (
     dynamics
 )
 
-#APC free flight 9x4
-R = 0.1143
+R = 0.15
 N_b = 2
 prop = propeller(R, N_b, "input/structure.csv")
 
-N_spanwise = 20
-N_chordwise = 20
+N_spanwise = 100
+N_chordwise = 40
 test = np.linspace(0, 1, N_spanwise)
-prop.discretise(N_spanwise, 'cosine', 'linear', N_chordwise, 'linear')
+prop.discretise(N_spanwise, 'cosine', 'linear', N_chordwise, 'cubic_spline', False, 4e-4)
 
 mu = 18.03e-6               # Pa s (air)
 #mu = 1.0518e-3              # Pa s (water)
@@ -29,19 +28,19 @@ rho = 1.225                 # kg/m^3 (air)
 #rho = 1000                  # kg/m^3 (water)
 c_sound = 343               # m/s (air)
 #c_sound = 1482              # m/s (water)
-#Omega = 3356/60*2*np.pi     # rad/s angular velocity
-Omega = 6000/60*2*np.pi
+Omega = 3356/60*2*np.pi     # rad/s angular velocity
+#Omega = 3000/60*2*np.pi
 n = Omega/(2*np.pi)           # rps
-J = 0.4                       # advance ratio
-V = J*n*2*R                    # m/s inflow velocity at infinity
-#V = 1e-3                    # m/s inflow velocity at infinity
+J = 1e-3                       # advance ratio
+#V = J*n*2*R                    # m/s inflow velocity at infinity
+V = 1e-3                    # m/s inflow velocity at infinity
 feather = 0  # degrees
 analysis = bemt(prop, V, Omega, feather, mu, rho, c_sound)
-analysis.generate_polars(-10, 15, 1, 3)
+analysis.generate_polars(-10, 15, 1, 5)
 #analysis.generate_polars_simple()
 analysis.method_ning()
 
-rho_m = 500
+rho_m = 1200
 analysis_2 = dynamics(prop, analysis, rho_m)
 max_stress = np.max(analysis_2.normal_stress)
 permissible_stress = 56.6*9.81/0.004**2     # N/m^2, https://www.mytechfun.com/pla/prusa
@@ -82,7 +81,7 @@ print(f"Maximum Shear Stress: {np.max(analysis_2.shear_stress):.3f} N/m^2")
 fig = plt.figure(figsize=(16, 9))
 for idx in range(N_spanwise):
     data = prop.af_r[idx]
-    plt.plot(data[0, :], data[1, :], linestyle='-', marker='x')
+    plt.plot(data[0, :], data[1, :], linestyle='-')
 plt.xlabel(r"$x$")
 plt.ylabel(r"$y$")
 plt.grid(True)
@@ -93,7 +92,7 @@ fig.savefig("output/airfoils.svg", format="svg",
 fig = plt.figure(figsize=(16, 9))
 for idx in range(N_spanwise):
     data = analysis.af_polars_extrap[idx]
-    plt.plot(data[:, 0], data[:, 1], linestyle='-', marker='x')
+    plt.plot(data[:, 0], data[:, 1], linestyle='-')
 plt.xlabel(r"$alpha (deg)$")
 plt.ylabel(r"$Cl$")
 plt.grid(True)
@@ -104,7 +103,7 @@ fig.savefig("output/Cl.svg", format="svg",
 fig = plt.figure(figsize=(16, 9))
 for idx in range(N_spanwise):
     data = analysis.af_polars_extrap[idx]
-    plt.plot(data[:, 0], data[:, 2], linestyle='-', marker='x')
+    plt.plot(data[:, 0], data[:, 2], linestyle='-')
 plt.xlabel(r"$alpha (deg)$")
 plt.ylabel(r"$Cd$")
 plt.grid(True)

@@ -19,6 +19,7 @@ class bemt:
         self.M = (self.V**2 + (self.Omega*prop.r)**2)**0.5/c_sound
         self.lambda_r = self.Omega*prop.r/self.V
         self.sigma_prime = prop.N_b*prop.c/(2*np.pi*prop.r)
+        self.chord = prop.c
 
     def generate_polars_simple(self):
         alpha = np.linspace(-180, 180, 361)
@@ -299,6 +300,7 @@ QUIT
         self.alpha_sol = np.zeros_like(self.pitch)
         self.c_thrust_sol = np.zeros_like(self.pitch)
         self.c_drag_sol = np.zeros_like(self.pitch)
+        self.F_g = np.zeros_like(self.pitch)
         for idx in range(1, len(self.pitch) - 1):
             g = lambda x: f(x, idx)
             phi_sol_i = brentq(g, self.epsilon, np.pi/2 - self.epsilon)
@@ -306,6 +308,7 @@ QUIT
             self.alpha_sol[idx] = alpha_fun(phi_sol_i, idx)
             self.c_thrust_sol[idx] = c_thrust(phi_sol_i, idx)
             self.c_drag_sol[idx] = c_drag(phi_sol_i, idx)
+            self.F_g[idx] = 0.25*self.sigma_prime[idx]*c_n(phi_sol_i, idx)/np.sin(phi_sol_i)**2
 
         self.dTdr = self.c_thrust_sol*self.r*self.rho*self.V**2*np.pi
         self.dDdr = self.c_drag_sol*self.r*self.rho*self.V**2*np.pi
@@ -315,17 +318,18 @@ QUIT
     def method_ning_2(self):
 
         def alpha_fun(phi, i):
-            return (
-                phi - self.pitch[i]
-            )
+            return self.pitch[i] - phi
 
+        # --- Aerodynamics (ONLY used for φ solve) ---
         def c_n(phi, i):
             alpha = alpha_fun(phi, i)
             alpha_raw = np.radians(self.af_polars_extrap[i][:, 0])
             cl_raw = self.af_polars_extrap[i][:, 1]
             cd_raw = self.af_polars_extrap[i][:, 2]
+
             cl = np.interp(alpha, alpha_raw, cl_raw)
             cd = np.interp(alpha, alpha_raw, cd_raw)
+
             return cl*np.cos(phi) - cd*np.sin(phi)
 
         def c_t(phi, i):
@@ -333,80 +337,76 @@ QUIT
             alpha_raw = np.radians(self.af_polars_extrap[i][:, 0])
             cl_raw = self.af_polars_extrap[i][:, 1]
             cd_raw = self.af_polars_extrap[i][:, 2]
+
             cl = np.interp(alpha, alpha_raw, cl_raw)
             cd = np.interp(alpha, alpha_raw, cd_raw)
+
             return cl*np.sin(phi) + cd*np.cos(phi)
 
+        # --- Prandtl factor ---
         def F(phi, i):
             f_tip = self.N_b/2*(self.R - self.r[i])/(self.r[i]*abs(np.sin(phi)))
-            F_tip = 2/np.pi*np.arccos(np.exp(-f_tip))
-            return F_tip
+            return (2/np.pi)*np.arccos(np.exp(-f_tip))
 
+        # --- κ definitions ---
         def kappa(phi, i):
-            return (
-                self.sigma_prime[i]*c_n(phi, i)/(4*F(phi, i)*np.sin(phi)**2)
-            )
+            return self.sigma_prime[i]*c_n(phi,i)/(4*F(phi,i)*np.sin(phi)**2)
 
-        def kappa_prime(phi, i):
-            return (
-                self.sigma_prime[i]*c_t(phi, i)/(4*F(phi, i)*np.sin(phi)*np.cos(phi))
-            )
+        def kappa_p(phi, i):
+            return self.sigma_prime[i]*c_t(phi,i)/(4*F(phi,i)*np.sin(phi)*np.cos(phi))
 
-        def gamma_1(phi, i):
-            return (
-                2*F(phi, i)*kappa(phi, i) - (10/9 - F(phi, i))
-            )
-
-        def gamma_2(phi, i):
-            return (
-                2*F(phi, i)*kappa(phi, i) - F(phi, i)*(4/3 - F(phi, i))
-            )
-
-        def gamma_3(phi, i):
-            return (
-                2*F(phi, i)*kappa(phi, i) - (25/9 - 2*F(phi, i))
-            )
-
+        # --- induction ---
         def a(phi, i):
-            if kappa(phi, i) < 2/3:
-                return kappa(phi, i)/(1 + kappa(phi, i))
-            else:
-                return (gamma_1(phi, i) - gamma_2(phi, i)**0.5)/gamma_3(phi, i)
+            return kappa(phi,i)/(1 + kappa(phi,i))
 
-        def a_prime(phi, i):
-            return (
-                kappa_prime(phi, i)/(1 + kappa_prime(phi, i))
-            )
+        def a_p(phi, i):
+            return kappa_p(phi,i)/(1 + kappa_p(phi,i))
 
+        # --- Ning residual (propeller form) ---
         def f(phi, i):
             return (
-                np.sin(phi)/(1 - a(phi, i)) - np.cos(phi)*(1 - kappa_prime(phi, i))/self.lambda_r[i]
+                np.sin(phi)/(1 + a(phi,i))
+                - np.cos(phi)*(1 - kappa_p(phi,i))/self.lambda_r[i]
             )
 
-        def f_PB(phi, i):
-            return (
-                np.sin(phi)*(1 - kappa(phi, i)) - np.cos(phi)*(1 - kappa_prime(phi, i))/self.lambda_r[i]
-            )
-
-        def c_thrust(phi, i):
-            return (
-                ((1 - a(phi, i))/np.sin(phi))**2*c_n(phi, i)*self.sigma_prime[i]
-            )
-
+        # --- solver storage ---
         self.phi_sol = np.zeros_like(self.pitch)
         self.alpha_sol = np.zeros_like(self.pitch)
-        self.c_thrust_sol = np.zeros_like(self.pitch)
-        for idx in range(len(self.pitch)):
-            epsilon = 1e-6
-            if f(np.pi/2, idx) > 0:
-                g = lambda x: f(x, idx)
-                phi_sol_i = brentq(g, epsilon, np.pi/2)
-            elif (f_PB(-np.pi/4, idx) < 0) & (f_PB(epsilon, idx) > 0):
-                g = lambda x: f_PB(x, idx)
-                phi_sol_i = brentq(g, -np.pi/4, -epsilon)
-            else:
-                g = lambda x: f(x, idx)
-                phi_sol_i = brentq(g, np.pi/2, np.pi)
-            self.phi_sol[idx] = phi_sol_i
-            self.alpha_sol[idx] = alpha_fun(phi_sol_i, idx)
-            self.c_thrust_sol[idx] = c_thrust(phi_sol_i, idx)
+
+        self.dTdr = np.zeros_like(self.pitch)
+        self.dQdr = np.zeros_like(self.pitch)
+
+        epsilon = 1e-6
+
+        for i in range(1, len(self.pitch)-1):
+
+            # --- φ solve ---
+            phi = brentq(lambda x: f(x,i),
+                        epsilon,
+                        np.pi/2 - epsilon)
+
+            self.phi_sol[i] = phi
+            self.alpha_sol[i] = alpha_fun(phi,i)
+
+            # --- induced velocities ---
+            a_i = a(phi,i)
+            ap_i = a_p(phi,i)
+            F_i = F(phi,i)
+
+            r = self.r[i]
+
+            # --- MOMENTUM thrust (stable, no blow-up) ---
+            self.dTdr[i] = (
+                4*np.pi*r*self.rho*self.V**2
+                * a_i*(1 + a_i)
+                * F_i
+            )
+
+            # --- MOMENTUM torque ---
+            self.dQdr[i] = (
+                4*np.pi*r**3*self.rho*self.V*self.lambda_r[i]*self.V
+                * ap_i*(1 - ap_i)
+                * F_i
+            )
+        self.p_n = self.dTdr/self.N_b
+        self.p_t = self.dDdr/self.N_b
