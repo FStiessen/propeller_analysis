@@ -23,7 +23,15 @@ class propeller:
         self.af_raw = data['airfoil']
         self.thickness_raw = R*data['thickness']
 
-    def discretise(self, N_spanwise, spacing, type, N_chordwise, type_c, enforce_te_thickness, min_thickness):
+    def discretise(
+            self,
+            N_spanwise,
+            spacing, type,
+            N_chordwise,
+            type_c,
+            enforce_te_thickness=False,
+            min_thickness=4e-4
+            ):
         xi_s = np.linspace(0, 1, N_spanwise)
         r_1 = self.r_raw[0]
         r_2 = self.R
@@ -98,7 +106,7 @@ class propeller:
 
         self.af_r = []
         self.areas = np.zeros_like(self.r)
-        self.centroids = []
+        self.centroids = np.zeros((len(self.r), 2))
         for idx_r in range(N_spanwise):
             r_val = self.r[idx_r]
             idx_above = np.searchsorted(self.r_raw, r_val, side='left')
@@ -107,7 +115,8 @@ class propeller:
             idx_below = max(idx_above - 1, 0)
 
             def _find_non_blended(idx, step):
-                while 0 <= idx < len(self.af_raw) and self.af_raw[idx] == 'blended':
+                while (0 <= idx < len(self.af_raw) and
+                       self.af_raw[idx] == 'blended'):
                     idx += step
                 return idx
 
@@ -135,11 +144,16 @@ class propeller:
             max_thickness = np.max(thickness)
             camber = (y_u + y_l)/2
             if self.thickness[idx_r] != 0:
-                thickness = thickness/max_thickness*self.thickness[idx_r]/self.c[idx_r]
+                thickness = (thickness/max_thickness*self.thickness[idx_r] /
+                             self.c[idx_r])
             if enforce_te_thickness:
                 x = af_blended[0, N_chordwise:]
                 te_thickness = thickness[-1]
-                mod = np.where(x >= 0.5, 4*(x - 0.5)**2*(min_thickness/self.c[idx_r] - te_thickness), 0)
+                mod = np.where(
+                    x >= 0.5,
+                    4*(x - 0.5)**2*(min_thickness/self.c[idx_r] -
+                                    te_thickness), 0
+                    )
                 thickness = thickness + mod
             y_u_new = camber + thickness/2
             y_l_new = camber - thickness/2
@@ -164,7 +178,7 @@ class propeller:
 
             area, centroid = airfoil_centroid(af_blended)
             self.areas[idx_r] = area*self.c[idx_r]**2
-            self.centroids.append(centroid*self.c[idx_r])
+            self.centroids[idx_r] = centroid*self.c[idx_r]
 
             filename = f"output/airfoils/af_{idx_r}.dat"
             np.savetxt(filename,

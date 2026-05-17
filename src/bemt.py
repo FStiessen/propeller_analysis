@@ -15,7 +15,8 @@ class bemt:
         self.Omega = Omega
         self.mu = mu
         self.rho = rho
-        self.Re = self.rho*(self.V**2 + (self.Omega*prop.r)**2)**0.5*prop.c/self.mu
+        self.Re = (self.rho*(self.V**2 + (self.Omega*prop.r)**2)**0.5 *
+                   prop.c/self.mu)
         self.M = (self.V**2 + (self.Omega*prop.r)**2)**0.5/c_sound
         self.lambda_r = self.Omega*prop.r/self.V
         self.sigma_prime = prop.N_b*prop.c/(2*np.pi*prop.r)
@@ -36,14 +37,16 @@ class bemt:
             self.af_polars_extrap.append(extrapolated_polar_array)
 
     def generate_polars(self, alpha_min, alpha_max, dalpha, N_crit):
-        """Generate lift and drag polars for all airfoils in output/airfoils using xfoil."""
+        """Generate lift and drag polars for all airfoils in output/airfoils
+        using xfoil."""
         airfoil_dir = os.path.join('output', 'airfoils')
 
         if not os.path.exists(airfoil_dir):
             print(f"Directory {airfoil_dir} not found")
             return
 
-        airfoil_files = sorted([f for f in os.listdir(airfoil_dir) if f.endswith('.dat')])
+        airfoil_files = sorted([f for f in os.listdir(airfoil_dir) if
+                                f.endswith('.dat')])
 
         if not airfoil_files:
             print(f"No .dat files found in {airfoil_dir}")
@@ -68,7 +71,8 @@ class bemt:
             af_path = os.path.abspath(os.path.join(airfoil_dir, af_file))
             af_name = os.path.splitext(af_file)[0]
 
-            # Extract spanwise index from filename (e.g., af_0.dat -> idx_r = 0)
+            # Extract spanwise index from filename
+            # (e.g., af_0.dat -> idx_r = 0)
             idx_r = int(af_name.split('_')[1])
             Re = int(round(self.Re[idx_r]))
             Mach = self.M[idx_r]
@@ -111,7 +115,8 @@ QUIT
                     text=True,
                     cwd=os.path.dirname(xfoil_exe)
                 )
-                stdout, stderr = process.communicate(input=input_script, timeout=60)
+                stdout, stderr = process.communicate(input=input_script,
+                                                     timeout=60)
 
                 if stderr:
                     print(f"xfoil stderr for {af_file}: {stderr}")
@@ -175,13 +180,19 @@ QUIT
                     a_max = alpha_raw[-1]
                     cl_min = cl_raw[0]
                     cl_max = cl_raw[-1]
-                    A_2_min = (cl_min - A_1*np.sin(2*np.radians(a_min)))*np.sin(np.radians(a_min))/np.cos(np.radians(a_min))**2
-                    A_2_max = (cl_max - A_1*np.sin(2*np.radians(a_max)))*np.sin(np.radians(a_max))/np.cos(np.radians(a_max))**2
+                    A_2_min = ((cl_min - A_1*np.sin(2*np.radians(a_min))) *
+                               np.sin(np.radians(a_min)) /
+                               np.cos(np.radians(a_min))**2)
+                    A_2_max = ((cl_max - A_1*np.sin(2*np.radians(a_max))) *
+                               np.sin(np.radians(a_max)) /
+                               np.cos(np.radians(a_max))**2)
 
                     cd_min = cd_raw[0]
                     cd_max = cd_raw[-1]
-                    B_2_min = (cd_min - B_1*np.sin(np.radians(a_min))**2)/np.cos(np.radians(a_min))
-                    B_2_max = (cd_max - B_1*np.sin(np.radians(a_max))**2)/np.cos(np.radians(a_max))
+                    B_2_min = ((cd_min - B_1*np.sin(np.radians(a_min))**2) /
+                               np.cos(np.radians(a_min)))
+                    B_2_max = ((cd_max - B_1*np.sin(np.radians(a_max))**2) /
+                               np.cos(np.radians(a_max)))
 
                     # Shared conditions for cl and cd
                     conditions = [
@@ -194,8 +205,10 @@ QUIT
                     # Choices for cl
                     cl_choices = [
                         A_1*np.sin(2*alpha_rad),
-                        A_1*np.sin(2*alpha_rad) + A_2_min*np.cos(alpha_rad)**2/np.sin(alpha_rad),
-                        A_1*np.sin(2*alpha_rad) + A_2_max*np.cos(alpha_rad)**2/np.sin(alpha_rad),
+                        (A_1*np.sin(2*alpha_rad) +
+                         A_2_min*np.cos(alpha_rad)**2/np.sin(alpha_rad)),
+                        (A_1*np.sin(2*alpha_rad) +
+                         A_2_max*np.cos(alpha_rad)**2/np.sin(alpha_rad)),
                         np.interp(alpha, alpha_raw, cl_raw)
                     ]
                     cl = np.select(conditions, cl_choices, default=0)
@@ -213,12 +226,12 @@ QUIT
                     cd = B_1*np.sin(alpha_rad)**2
                     print(f"Error: Polar data for {af_file} is incomplete. Using simple extrapolation.")
 
-                #cl = np.flip(cl)
-                #cl = np.flip(cd)
                 extrapolated_polar_array = np.column_stack((alpha, cl, cd))
                 return extrapolated_polar_array
 
-            self.af_polars_extrap[idx_r] = extrapolation_fun(self.af_polars[idx_r])
+            self.af_polars_extrap[idx_r] = extrapolation_fun(
+                self.af_polars[idx_r]
+                )
 
     def method_ning(self):
         self.epsilon = 1e-6
@@ -261,7 +274,8 @@ QUIT
 
         def kappa_prime(phi, i):
             return (
-                self.sigma_prime[i]*c_t(phi, i)/(4*F(phi, i)*np.sin(phi)*np.cos(phi))
+                self.sigma_prime[i]*c_t(phi, i) /
+                (4*F(phi, i)*np.sin(phi)*np.cos(phi))
             )
 
         def a(phi, i):
@@ -308,7 +322,8 @@ QUIT
             self.alpha_sol[idx] = alpha_fun(phi_sol_i, idx)
             self.c_thrust_sol[idx] = c_thrust(phi_sol_i, idx)
             self.c_drag_sol[idx] = c_drag(phi_sol_i, idx)
-            self.F_g[idx] = 0.25*self.sigma_prime[idx]*c_n(phi_sol_i, idx)/np.sin(phi_sol_i)**2
+            self.F_g[idx] = (0.25*self.sigma_prime[idx]*c_n(phi_sol_i, idx) /
+                             np.sin(phi_sol_i)**2)
 
         self.dTdr = self.c_thrust_sol*self.r*self.rho*self.V**2*np.pi
         self.dDdr = self.c_drag_sol*self.r*self.rho*self.V**2*np.pi
