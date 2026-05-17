@@ -17,10 +17,12 @@ from src.creategeometry import (
 )
 
 R = 0.254
-N_b = 4
-prop = propeller(R, N_b, "input/structure.csv")
+N_b = 3
+filename = "structure.csv"
+prop = propeller(R, N_b, f"input/{filename}")
+geometry = False
 
-N_spanwise = 10
+N_spanwise = 100
 N_chordwise = 40
 test = np.linspace(0, 1, N_spanwise)
 prop.discretise(
@@ -38,9 +40,9 @@ c_sound = 343               # m/s (air)
 # Omega = 3356/60*2*np.pi     # rad/s angular velocity
 Omega = 4000/60*2*np.pi
 n = Omega/(2*np.pi)           # rps
-J = 1e-3                       # advance ratio
+J = 0.2                      # advance ratio
 # V = J*n*2*R                    # m/s inflow velocity at infinity
-V = 1e-3                    # m/s inflow velocity at infinity
+V = 10                    # m/s inflow velocity at infinity
 feather = 0  # degrees
 analysis = bemt(prop, V, Omega, feather, mu, rho, c_sound)
 analysis.generate_polars(-10, 15, 1, 1)
@@ -54,10 +56,11 @@ permissible_stress = 56.6*9.81/0.004**2     # N/m^2
 # source: https://www.mytechfun.com/pla/prusa
 N_U = 100
 N_W = 50
-create_geometry(
-    prop, analysis_2, N_U, N_W, left_handed=False,
-    round_te=False, approximate_curves=True
-    )
+if geometry:
+    create_geometry(
+        prop, analysis_2, N_U, N_W, left_handed=False,
+        round_te=False, approximate_curves=True
+        )
 
 sigma = np.trapezoid(prop.c, prop.r)*prop.N_b/(np.pi*prop.R**2)
 print(f"Solidity: {sigma*100:.3f} %")

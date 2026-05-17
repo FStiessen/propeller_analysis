@@ -18,9 +18,10 @@ class bemt:
         self.Re = (self.rho*(self.V**2 + (self.Omega*prop.r)**2)**0.5 *
                    prop.c/self.mu)
         self.M = (self.V**2 + (self.Omega*prop.r)**2)**0.5/c_sound
-        self.lambda_r = self.Omega*prop.r/self.V
+        # self.lambda_r = self.Omega*prop.r/self.V
         self.sigma_prime = prop.N_b*prop.c/(2*np.pi*prop.r)
         self.chord = prop.c
+        self.epsilon = 1e-6
 
     def generate_polars_simple(self):
         alpha = np.linspace(-180, 180, 361)
@@ -234,109 +235,11 @@ QUIT
                 )
 
     def method_ning(self):
-        self.epsilon = 1e-6
-
-        def alpha_fun(phi, i):
-            return (
-                self.pitch[i] - phi
-            )
-
-        def c_n(phi, i):
-            alpha = alpha_fun(phi, i)
-            alpha_raw = np.radians(self.af_polars_extrap[i][:, 0])
-            cl_raw = self.af_polars_extrap[i][:, 1]
-            cd_raw = self.af_polars_extrap[i][:, 2]
-            cl = np.interp(alpha, alpha_raw, cl_raw)
-            cd = np.interp(alpha, alpha_raw, cd_raw)
-            return cl*np.cos(phi) - cd*np.sin(phi)
-
-        def c_t(phi, i):
-            alpha = alpha_fun(phi, i)
-            alpha_raw = np.radians(self.af_polars_extrap[i][:, 0])
-            cl_raw = self.af_polars_extrap[i][:, 1]
-            cd_raw = self.af_polars_extrap[i][:, 2]
-            cl = np.interp(alpha, alpha_raw, cl_raw)
-            cd = np.interp(alpha, alpha_raw, cd_raw)
-            return cl*np.sin(phi) + cd*np.cos(phi)
-
-        def F(phi, i):
-            sin_phi = max(abs(np.sin(phi)), self.epsilon)
-            f_tip = self.N_b/2*(self.R - self.r[i])/(self.r[i]*sin_phi)
-            F_tip = 2/np.pi * np.arccos(np.exp(-f_tip))
-            f_hub = self.N_b/2*(self.r[i] - self.r[0])/(self.r[i]*sin_phi)
-            F_hub = 2/np.pi * np.arccos(np.exp(-f_hub))
-            return np.clip(F_tip*F_hub, self.epsilon, 1.0)
-
-        def kappa(phi, i):
-            return (
-                self.sigma_prime[i]*c_n(phi, i)/(4*F(phi, i)*np.sin(phi)**2)
-            )
-
-        def kappa_prime(phi, i):
-            return (
-                self.sigma_prime[i]*c_t(phi, i) /
-                (4*F(phi, i)*np.sin(phi)*np.cos(phi))
-            )
-
-        def a(phi, i):
-            k = kappa(phi, i)
-            return k/(1 - k)
-
-        def a_prime(phi, i):
-            return (
-                kappa_prime(phi, i)/(1 + kappa_prime(phi, i))
-            )
-
-        def f(phi, i):
-            a_val = a(phi, i)
-            ap_val = a_prime(phi, i)
-
-            return (
-                np.sin(phi)/(1 + a_val)
-                - np.cos(phi)/(self.lambda_r[i]*(1 - ap_val))
-            )
-
-        def c_thrust(phi, i):
-            return (
-                ((1 + a(phi, i))/np.sin(phi))**2
-                * c_n(phi, i)
-                * self.sigma_prime[i]
-            )
-
-        def c_drag(phi, i):
-            return (
-                ((1 + a(phi, i))/np.sin(phi))**2
-                * c_t(phi, i)
-                * self.sigma_prime[i]
-            )
-
-        self.phi_sol = np.zeros_like(self.pitch)
-        self.alpha_sol = np.zeros_like(self.pitch)
-        self.c_thrust_sol = np.zeros_like(self.pitch)
-        self.c_drag_sol = np.zeros_like(self.pitch)
-        self.F_g = np.zeros_like(self.pitch)
-        for idx in range(1, len(self.pitch) - 1):
-            g = lambda x: f(x, idx)
-            phi_sol_i = brentq(g, self.epsilon, np.pi/2 - self.epsilon)
-            self.phi_sol[idx] = phi_sol_i
-            self.alpha_sol[idx] = alpha_fun(phi_sol_i, idx)
-            self.c_thrust_sol[idx] = c_thrust(phi_sol_i, idx)
-            self.c_drag_sol[idx] = c_drag(phi_sol_i, idx)
-            self.F_g[idx] = (0.25*self.sigma_prime[idx]*c_n(phi_sol_i, idx) /
-                             np.sin(phi_sol_i)**2)
-
-        self.dTdr = self.c_thrust_sol*self.r*self.rho*self.V**2*np.pi
-        self.dDdr = self.c_drag_sol*self.r*self.rho*self.V**2*np.pi
-        self.p_n = self.dTdr/self.N_b
-        self.p_t = self.dDdr/self.N_b
-
-    def method_ning_2(self):
 
         def alpha_fun(phi, i):
             return self.pitch[i] - phi
 
-        # --- Aerodynamics (ONLY used for φ solve) ---
-        def c_n(phi, i):
+        def c_n_fun(phi, i):
             alpha = alpha_fun(phi, i)
             alpha_raw = np.radians(self.af_polars_extrap[i][:, 0])
             cl_raw = self.af_polars_extrap[i][:, 1]
@@ -347,7 +250,7 @@ QUIT
 
             return cl*np.cos(phi) - cd*np.sin(phi)
 
-        def c_t(phi, i):
+        def c_t_fun(phi, i):
             alpha = alpha_fun(phi, i)
             alpha_raw = np.radians(self.af_polars_extrap[i][:, 0])
             cl_raw = self.af_polars_extrap[i][:, 1]
@@ -359,69 +262,138 @@ QUIT
             return cl*np.sin(phi) + cd*np.cos(phi)
 
         # --- Prandtl factor ---
-        def F(phi, i):
+        def F_fun(phi, i):
             f_tip = self.N_b/2*(self.R - self.r[i])/(self.r[i]*abs(np.sin(phi)))
-            return (2/np.pi)*np.arccos(np.exp(-f_tip))
+            F_tip = 2/np.pi*np.arccos(np.exp(-f_tip))
+            f_hub = self.N_b/2*(self.r[i] - self.r[0])/(self.r[i]*abs(np.sin(phi)))
+            F_hub = 2/np.pi*np.arccos(np.exp(-f_hub))
+            return F_tip*F_hub
 
-        # --- κ definitions ---
         def kappa(phi, i):
-            return self.sigma_prime[i]*c_n(phi,i)/(4*F(phi,i)*np.sin(phi)**2)
+            c_n = c_n_fun(phi, i)
+            F = F_fun(phi, i)
+            return c_n*self.sigma_prime[i]/(4*F*np.sin(phi)**2)
 
         def kappa_p(phi, i):
-            return self.sigma_prime[i]*c_t(phi,i)/(4*F(phi,i)*np.sin(phi)*np.cos(phi))
+            c_t = c_t_fun(phi, i)
+            F = F_fun(phi, i)
+            return c_t*self.sigma_prime[i]/(4*F*np.sin(phi)*np.cos(phi))
 
-        # --- induction ---
-        def a(phi, i):
-            return kappa(phi,i)/(1 + kappa(phi,i))
+        def a_fun(phi, i):
+            k = kappa(phi, i)
+            F = F_fun(phi, i)
+            if phi < 0:
+                k = -k
+            if k >= -2/3:
+                a = k/(1 - k)
+            else:
+                g_1 = F*(2*k - 1) + 10/9
+                g_2 = F*(F - 2*k - 4/3)
+                g_3 = 2*F*(1 - k) - 25/9
+                if g_3 == 0:
+                    a = 1/(2*g_2**0.5) - 1
+                else:
+                    a = (g_1 + g_2**0.5)/g_3
+            return a
 
-        def a_p(phi, i):
-            return kappa_p(phi,i)/(1 + kappa_p(phi,i))
+        def a_p_fun(phi, i):
+            V_x = self.V
+            k_p = kappa_p(phi, i)
+            if V_x < 0:
+                k_p = -k_p
+            a_p = k_p/(1 + k_p)
+            return a_p
 
-        # --- Ning residual (propeller form) ---
-        def f(phi, i):
-            return (
-                np.sin(phi)/(1 + a(phi,i))
-                - np.cos(phi)*(1 - kappa_p(phi,i))/self.lambda_r[i]
-            )
+        def residual_fun(phi, i):
+            V_x = self.V
+            V_y = self.Omega*self.r[i]
+            k = kappa(phi, i)
+            k_p = kappa_p(phi, i)
+            if V_x == 0:
+                res = np.sign(phi) - k
+            elif abs(k) == 1:
+                return 1
+            elif V_y == 0:
+                res = np.sign(V_x) + k_p
+            elif k_p == -1:
+                return 1
+            else:
+                a = a_fun(phi, i)
+                a_p = a_p_fun(phi, i)
+                res = np.sin(phi)/(1 + a) - V_x/V_y*np.cos(phi)/(1 - a_p)
+            return res
 
         # --- solver storage ---
-        self.phi_sol = np.zeros_like(self.pitch)
-        self.alpha_sol = np.zeros_like(self.pitch)
+        self.phi_sol = np.zeros_like(self.r)
+        self.alpha_sol = np.zeros_like(self.r)
+        self.p_n = np.zeros_like(self.r)
+        self.p_t = np.zeros_like(self.r)
 
-        self.dTdr = np.zeros_like(self.pitch)
-        self.dQdr = np.zeros_like(self.pitch)
+        for i in range(1, len(self.r) - 1):
+            V_x = self.V
+            V_y = self.Omega*self.r[i]
+            theta = self.pitch[i]
 
-        epsilon = 1e-6
+            q_1 = [self.epsilon, np.pi/2]
+            q_2 = [-np.pi/2, -self.epsilon]
+            q_3 = [np.pi/2, np.pi - self.epsilon]
+            q_4 = [-np.pi + self.epsilon, -np.pi/2]
 
-        for i in range(1, len(self.pitch)-1):
+            if V_x == 0:
+                if (V_y > 0) & (theta > 0):
+                    quadrants = [q_1, q_2]
+                elif (V_y > 0) & (theta < 0):
+                    quadrants = [q_2, q_1]
+                elif (V_y < 0) & (theta > 0):
+                    quadrants = [q_3, q_4]
+                elif (V_y < 0) & (theta < 0):
+                    quadrants = [q_4, q_3]
+            elif V_y == 0:
+                if (V_x > 0) & (np.abs(theta) < np.pi/2):
+                    quadrants = [q_1, q_3]
+                elif (V_x < 0) & (np.abs(theta) < np.pi/2):
+                    quadrants = [q_2, q_4]
+                elif (V_x > 0) & (np.abs(theta) > np.pi/2):
+                    quadrants = [q_3, q_1]
+                elif (V_x < 0) & (np.abs(theta) > np.pi/2):
+                    quadrants = [q_4, q_2]
+            elif (V_x > 0) & (V_y > 0):
+                quadrants = [q_1, q_2, q_3, q_4]
+            elif (V_x < 0) & (V_y > 0):
+                quadrants = [q_2, q_1, q_4, q_3]
+            elif (V_x > 0) & (V_y < 0):
+                quadrants = [q_3, q_4, q_1, q_2]
+            elif (V_x < 0) & (V_y < 0):
+                quadrants = [q_4, q_3, q_2, q_1]
 
-            # --- φ solve ---
-            phi = brentq(lambda x: f(x,i),
-                        epsilon,
-                        np.pi/2 - epsilon)
+            g = lambda x: residual_fun(x, i)
+            phi = np.nan
+            for q in quadrants:
+                phi_1 = q[0]
+                phi_2 = q[1]
+                if g(phi_1)*g(phi_2) < 0:
+                    phi = brentq(g, phi_1, phi_2)
+                    break
 
             self.phi_sol[i] = phi
-            self.alpha_sol[i] = alpha_fun(phi,i)
+            self.alpha_sol[i] = alpha_fun(phi, i)
+            k_sol = kappa(phi, i)
+            k_p_sol = kappa_p(phi, i)
+            if V_x == 0:
+                u = np.sign(phi)*k_sol*V_y*np.tan(phi)
+                v = 0
+                W = ((V_x + u)**2 + (V_y - v)**2)**0.5
+            elif V_y == 0:
+                u = 0
+                v = k_p_sol*np.abs(V_x)/np.tan(phi)
+                W = ((V_x + u)**2 + (V_y - v)**2)**0.5
+            else:
+                a_sol = a_fun(phi, i)
+                a_p_sol = a_p_fun(phi, i)
+                W = ((V_x*(1 + a_sol))**2 + (V_y*(1 - a_p_sol))**2)**0.5
+            q = 0.5*self.rho*W**2
+            self.p_n[i] = c_n_fun(phi, i)*q*self.chord[i]
+            self.p_t[i] = c_t_fun(phi, i)*q*self.chord[i]
 
-            # --- induced velocities ---
-            a_i = a(phi,i)
-            ap_i = a_p(phi,i)
-            F_i = F(phi,i)
-
-            r = self.r[i]
-
-            # --- MOMENTUM thrust (stable, no blow-up) ---
-            self.dTdr[i] = (
-                4*np.pi*r*self.rho*self.V**2
-                * a_i*(1 + a_i)
-                * F_i
-            )
-
-            # --- MOMENTUM torque ---
-            self.dQdr[i] = (
-                4*np.pi*r**3*self.rho*self.V*self.lambda_r[i]*self.V
-                * ap_i*(1 - ap_i)
-                * F_i
-            )
-        self.p_n = self.dTdr/self.N_b
-        self.p_t = self.dDdr/self.N_b
+        self.dTdr = self.p_n*self.N_b
+        self.dDdr = self.p_t*self.N_b
