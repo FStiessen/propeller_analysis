@@ -18,7 +18,6 @@ class bemt:
         self.Re = (self.rho*(self.V**2 + (self.Omega*prop.r)**2)**0.5 *
                    prop.c/self.mu)
         self.M = (self.V**2 + (self.Omega*prop.r)**2)**0.5/c_sound
-        # self.lambda_r = self.Omega*prop.r/self.V
         self.sigma_prime = prop.N_b*prop.c/(2*np.pi*prop.r)
         self.chord = prop.c
         self.epsilon = 1e-6
@@ -37,7 +36,9 @@ class bemt:
         for idx in range(len(self.r)):
             self.af_polars_extrap.append(extrapolated_polar_array)
 
-    def generate_polars(self, alpha_min, alpha_max, dalpha, N_crit):
+    def generate_polars(
+            self, alpha_min, alpha_max, dalpha, N_crit, turbine_airfoil
+            ):
         """Generate lift and drag polars for all airfoils in output/airfoils
         using xfoil."""
         airfoil_dir = os.path.join('output', 'airfoils')
@@ -66,6 +67,7 @@ class bemt:
             return
 
         self.af_polars = [None]*len(self.r)
+        self.af_polars_corrected = [None]*len(self.r)
         self.af_polars_extrap = [None]*len(self.r)
 
         for af_file in airfoil_files:
@@ -168,6 +170,49 @@ QUIT
                 print(f"Error running xfoil: {e}")
                 return
 
+            def polar_3d_correction(data_raw):
+                try:
+                    alpha_raw = data_raw[:, 0]
+                    cl_raw = data_raw[:, 1]
+                    cd_raw = data_raw[:, 2]
+                except TypeError:
+                    return []
+                cd_0 = np.interp(0, alpha_raw, cd_raw)
+                f = lambda x: np.interp(x, alpha_raw, cl_raw)
+                alpha_0 = brentq(f, alpha_raw[0], alpha_raw[-1])
+                cl_p = 2*np.pi*np.radians(alpha_raw - alpha_0)
+
+                a = 1
+                b = 1
+                d = 1
+                c = self.chord[idx_r]
+                r = self.r[idx_r]
+                Omega = np.abs(self.Omega)
+                R = self.R
+                V_w = np.abs(self.V)
+
+                Lambda = Omega*R/(V_w**2 + (Omega*R)**2)**0.5
+                f_l = (
+                    1/(2*np.pi) *
+                    (1.6*(c/r)/0.1267 *
+                     (a - (c/r)**(d/Lambda*R/r)) /
+                     (b + (c/r)**(d/Lambda*R/r)) - 1)
+                    )
+                f_d = (
+                    1/(2*np.pi) *
+                    (1.6*(c/r)/0.1267 *
+                     (a - (c/r)**(d/(2*Lambda)*R/r)) /
+                     (b + (c/r)**(d/(2*Lambda)*R/r)) - 1)
+                    )
+                delta_cl = f_l*(cl_p - cl_raw)
+                delta_cd = f_d*(cd - cd_0)
+                cl_new = cl + delta_cl
+                cd_new = cd + delta_cd
+                corrected_polar_array = (
+                    np.column_stack((alpha_raw, cl_new, cd_new))
+                    )
+                return corrected_polar_array
+
             def extrapolation_fun(data_raw):
                 alpha = np.linspace(-180, 180, 361)
                 alpha_rad = np.radians(alpha)
@@ -227,11 +272,17 @@ QUIT
                     cd = B_1*np.sin(alpha_rad)**2
                     print(f"Error: Polar data for {af_file} is incomplete. Using simple extrapolation.")
 
+                if turbine_airfoil:
+                    cd = np.flip(cd)
+                    cl = -np.flip(cl)
                 extrapolated_polar_array = np.column_stack((alpha, cl, cd))
                 return extrapolated_polar_array
 
-            self.af_polars_extrap[idx_r] = extrapolation_fun(
+            self.af_polars_corrected[idx_r] = polar_3d_correction(
                 self.af_polars[idx_r]
+                )
+            self.af_polars_extrap[idx_r] = extrapolation_fun(
+                self.af_polars_corrected[idx_r]
                 )
 
     def method_ning(self):
@@ -261,7 +312,6 @@ QUIT
 
             return cl*np.sin(phi) + cd*np.cos(phi)
 
-        # --- Prandtl factor ---
         def F_fun(phi, i):
             f_tip = self.N_b/2*(self.R - self.r[i])/(self.r[i]*abs(np.sin(phi)))
             F_tip = 2/np.pi*np.arccos(np.exp(-f_tip))
