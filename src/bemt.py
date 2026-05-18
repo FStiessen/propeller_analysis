@@ -3,6 +3,13 @@ import subprocess
 import numpy as np
 from scipy.optimize import brentq
 
+"""
+SOURCES:
+[1] Ning, A. (2021). Using blade element momentum methods with gradient-based design optimization. Structural and Multidisciplinary Optimization, 64(2), 991-1014. https://doi.org/10.1007/s00158-021-02883-6
+[2] Du, Z., & Selig, M. (1998). A 3-D stall-delay model for horizontal axis wind turbine performance prediction. In 1998 ASME Wind Energy Symposium. American Institute of Aeronautics and Astronautics. 1998 ASME Wind Energy Symposium. https://doi.org/10.2514/6.1998-21
+[3] Viterna, L. A., & Janetzke, D. C. (1982). Theoretical and experimental power from large horizontal-axis wind turbines (NASA Technical Memorandum NASA-TM-82944). National Aeronautics and Space Administration.
+[4] Drela, M. (1989). XFOIL: An analysis and design system for low Reynolds number airfoils [Computer software]. Massachusetts Institute of Technology. https://web.mit.edu/drela/Public/web/xfoil/
+"""
 
 class bemt:
     def __init__(self, prop, V, Omega, feather, mu, rho, c_sound):
@@ -39,8 +46,7 @@ class bemt:
     def generate_polars(
             self, alpha_min, alpha_max, dalpha, N_crit, turbine_airfoil
             ):
-        """Generate lift and drag polars for all airfoils in output/airfoils
-        using xfoil."""
+        # Usage of [4]
         airfoil_dir = os.path.join('output', 'airfoils')
 
         if not os.path.exists(airfoil_dir):
@@ -171,6 +177,7 @@ QUIT
                 return
 
             def polar_3d_correction(data_raw):
+                # Implementation of [2]
                 try:
                     alpha_raw = data_raw[:, 0]
                     cl_raw = data_raw[:, 1]
@@ -217,6 +224,7 @@ QUIT
                 return corrected_polar_array
 
             def extrapolation_fun(data_raw):
+                # Implementation of [3]
                 alpha = np.linspace(-180, 180, 361)
                 alpha_rad = np.radians(alpha)
                 A_1 = 0.5
@@ -290,7 +298,7 @@ QUIT
                 )
 
     def method_ning(self):
-
+        # implementation of [1]
         def alpha_fun(phi, i):
             return self.pitch[i] - phi
 
