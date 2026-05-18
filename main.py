@@ -1,6 +1,7 @@
 # Import standard modules.
 import numpy as np
 from matplotlib import pyplot as plt
+from ambiance import Atmosphere
 
 # Import own modules.
 from src.propeller import (
@@ -19,7 +20,7 @@ from src.creategeometry import (
 """ GENERAL PROPERTIES """
 N_spanwise = 20
 N_chordwise = 20
-geometry = True
+geometry = False
 N_U = 100
 N_W = 50
 chordwise_interpolation = 'cubic_spline'
@@ -27,25 +28,27 @@ chordwise_interpolation = 'cubic_spline'
 simple_polars = False
 
 """ GEOMETRICAL PROPERTIES """
-filename = "naca_reference.csv"
-R = 3.048/2
-N_b = 3
+filename = "R22.csv"
+R = 7.67/2
+N_b = 2
 turbine_airfoil = False
-enforce_te_thickness = True
+enforce_te_thickness = False
 min_te_thickness = 1e-3
 round_te = True
 left_handed = False
 
 """ FLUID PROPERTIES """
-mu = 18.03e-6               # Pa s (air)
-rho = 1.225                 # kg/m^3 (air)
-c_sound = 343               # m/s (air)
-# mu = 1.0518e-3              # Pa s (water)
-# rho = 1000                  # kg/m^3 (water)
-# c_sound = 1482              # m/s (water)
+altitude = 0                            # m
+atmo_data = Atmosphere(altitude)
+rho = atmo_data.density[0]              # kg/m^3 (air)
+c_sound = atmo_data.speed_of_sound[0]   # m/s (air)
+mu = atmo_data.dynamic_viscosity[0]     # Pa s (air)
+# mu = 1.0518e-3                        # Pa s (water)
+# rho = 1000                            # kg/m^3 (water)
+# c_sound = 1482                        # m/s (water)
 
 """ XFOIL PROPERTIES """
-N_crit = 1
+N_crit = 6
 alpha_min = -5
 alpha_max = 15
 dalpha = 1
@@ -56,9 +59,9 @@ permissible_stress = 56.6*9.81/0.004**2     # N/m^2
 # source: https://www.mytechfun.com/pla/prusa
 
 """ OPERATIONAL PROPERTIES """
-Omega = 1000/60*2*np.pi     # rad/s angular velocity
-V = 10                       # m/s inflow velocity at infinity
-feather = 0                 # degrees
+Omega = 530/60*2*np.pi     # rad/s angular velocity
+V = 0                       # m/s inflow velocity at infinity
+feather = 5                 # degrees
 
 n = Omega/(2*np.pi)         # rps
 J = V/(n*2*R)               # advance ratio
@@ -79,6 +82,8 @@ else:
         alpha_min, alpha_max, dalpha, N_crit, turbine_airfoil
         )
 aero_analysis.method_ning()
+
+# prop.naca_airfoil('2412')
 
 dyn_analysis = dynamics(prop, aero_analysis, rho_m)
 max_stress = np.max(dyn_analysis.normal_stress)

@@ -58,8 +58,8 @@ class propeller:
         self.thickness = f_t(self.r)
 
         # airfoil interpolation
-        xi_c = np.linspace(0, 1, N_chordwise)
-        xi_c = (1 - np.cos(xi_c*np.pi))/2
+        self.xi_c = np.linspace(0, 1, N_chordwise)
+        self.xi_c = (1 - np.cos(self.xi_c*np.pi))/2
 
         # interpolate all unique airfoils to common discretisation
         af_files = np.unique(self.af_raw)
@@ -89,11 +89,11 @@ class propeller:
                 f_l = interp1d(x_l_raw, y_l_raw, kind=type_c)
             else:
                 raise ValueError('wrong type of interpolation')
-            y_u = f_u(xi_c)
-            y_l = f_l(xi_c)
+            y_u = f_u(self.xi_c)
+            y_l = f_l(self.xi_c)
 
             y_new = np.concatenate((np.flip(y_u[1:]), y_l))
-            x_new = np.concatenate((np.flip(xi_c[1:]), xi_c))
+            x_new = np.concatenate((np.flip(self.xi_c[1:]), self.xi_c))
             self.af_data[af] = np.vstack((x_new, y_new))
 
         # blend airfoils
@@ -185,3 +185,33 @@ class propeller:
                        af_blended.T,
                        fmt="%.6f",
                        comments="")
+
+    def naca_airfoil(self, name):
+        length = len(name)
+        x = self.xi_c
+        if length == 4:
+            m = float(name[0])/100
+            p = float(name[1])/10
+            t = float(name[2:4])/100
+            print('maximum camber:', m)
+            print('camber location:', p)
+            print('thickness:', t)
+            y_t = 5*t*(0.2969*x**0.5 -
+                       0.1260*x -
+                       0.3516*x**2 +
+                       0.2843*x**3 -
+                       0.1015*x**4)
+            y_c = np.where(x <= p, m/p**2*(2*p*x - x**2),
+                           m/(1 - p)**2*((1 - 2*p) + 2*p*x - x**2))
+            dy_cdx = np.where(x <= p, 2*m/p**2*(p - x),
+                              2*m/(1 - p)**2*(p - x))
+            theta = np.atan(dy_cdx)
+            print('camber:', y_c)
+            print('theta:', np.rad2deg(theta))
+            sin = np.sin(theta)
+            cos = np.cos(theta)
+            x_u = x - y_t*sin
+            x_l = x + y_t*sin
+            y_u = y_c + y_t*cos
+            y_l = y_c - y_t*cos
+            print('x_u:', x_u)
