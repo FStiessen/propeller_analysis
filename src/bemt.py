@@ -179,7 +179,10 @@ QUIT
                     return []
                 cd_0 = np.interp(0, alpha_raw, cd_raw)
                 f = lambda x: np.interp(x, alpha_raw, cl_raw)
-                alpha_0 = brentq(f, alpha_raw[0], alpha_raw[-1])
+                if f(alpha_raw[0])*f(alpha_raw[-1]) < 0:
+                    alpha_0 = brentq(f, alpha_raw[0], alpha_raw[-1])
+                else:
+                    alpha_0 = alpha_raw[0]
                 cl_p = 2*np.pi*np.radians(alpha_raw - alpha_0)
 
                 a = 1
@@ -273,6 +276,7 @@ QUIT
                     print(f"Error: Polar data for {af_file} is incomplete. Using simple extrapolation.")
 
                 if turbine_airfoil:
+                    alpha = -np.flip(alpha)
                     cd = np.flip(cd)
                     cl = -np.flip(cl)
                 extrapolated_polar_array = np.column_stack((alpha, cl, cd))

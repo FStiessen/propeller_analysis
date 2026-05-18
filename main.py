@@ -18,8 +18,8 @@ from src.creategeometry import (
 
 """ GENERAL PROPERTIES """
 N_spanwise = 20
-N_chordwise = 40
-geometry = False
+N_chordwise = 20
+geometry = True
 N_U = 100
 N_W = 50
 chordwise_interpolation = 'cubic_spline'
@@ -27,10 +27,14 @@ chordwise_interpolation = 'cubic_spline'
 simple_polars = False
 
 """ GEOMETRICAL PROPERTIES """
-filename = "DA_prop.csv"
-R = 0.15
-N_b = 2
+filename = "naca_reference.csv"
+R = 3.048/2
+N_b = 3
 turbine_airfoil = False
+enforce_te_thickness = True
+min_te_thickness = 1e-3
+round_te = True
+left_handed = False
 
 """ FLUID PROPERTIES """
 mu = 18.03e-6               # Pa s (air)
@@ -41,8 +45,8 @@ c_sound = 343               # m/s (air)
 # c_sound = 1482              # m/s (water)
 
 """ XFOIL PROPERTIES """
-N_crit = 7
-alpha_min = -10
+N_crit = 1
+alpha_min = -5
 alpha_max = 15
 dalpha = 1
 
@@ -52,8 +56,8 @@ permissible_stress = 56.6*9.81/0.004**2     # N/m^2
 # source: https://www.mytechfun.com/pla/prusa
 
 """ OPERATIONAL PROPERTIES """
-Omega = 3356/60*2*np.pi     # rad/s angular velocity
-V = 0                       # m/s inflow velocity at infinity
+Omega = 1000/60*2*np.pi     # rad/s angular velocity
+V = 10                       # m/s inflow velocity at infinity
 feather = 0                 # degrees
 
 n = Omega/(2*np.pi)         # rps
@@ -65,7 +69,7 @@ prop = propeller(R, N_b, f"input/{filename}")
 prop.discretise(
     N_spanwise, 'cosine', 'linear',
     N_chordwise, chordwise_interpolation,
-    enforce_te_thickness=False, min_thickness=4e-4
+    enforce_te_thickness, min_te_thickness
     )
 aero_analysis = bemt(prop, V, Omega, feather, mu, rho, c_sound)
 if simple_polars:
@@ -80,8 +84,8 @@ dyn_analysis = dynamics(prop, aero_analysis, rho_m)
 max_stress = np.max(dyn_analysis.normal_stress)
 if geometry:
     create_geometry(
-        prop, dyn_analysis, N_U, N_W, left_handed=False,
-        round_te=False, approximate_curves=True
+        prop, dyn_analysis, N_U, N_W, left_handed,
+        round_te, approximate_curves=True
         )
 
 sigma = np.trapezoid(prop.c, prop.r)*prop.N_b/(np.pi*prop.R**2)
