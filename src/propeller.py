@@ -25,6 +25,7 @@ class propeller:
 
     def discretise(
             self,
+            r_0,
             N_spanwise,
             spacing, type,
             N_chordwise,
@@ -33,7 +34,10 @@ class propeller:
             min_thickness=4e-4
             ):
         xi_s = np.linspace(0, 1, N_spanwise)
-        r_1 = self.r_raw[0]
+        if r_0*self.R < self.r_raw[0]:
+            r_1 = self.r_raw[0]
+        else:
+            r_1 = self.R*r_0
         r_2 = self.R
         if spacing == 'cosine':
             xi_s = (1 - np.cos(xi_s*np.pi))/2

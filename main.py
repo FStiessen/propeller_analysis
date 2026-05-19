@@ -20,7 +20,7 @@ from src.creategeometry import (
 """ GENERAL PROPERTIES """
 N_spanwise = 20
 N_chordwise = 20
-geometry = False
+geometry = True
 N_U = 100
 N_W = 50
 chordwise_interpolation = 'cubic_spline'
@@ -28,13 +28,14 @@ chordwise_interpolation = 'cubic_spline'
 simple_polars = False
 
 """ GEOMETRICAL PROPERTIES """
-filename = "R22.csv"
-R = 7.67/2
-N_b = 2
+filename = "linear_prop.csv"
+R = 0.254
+N_b = 3
+r_R_0 = 0.1
 turbine_airfoil = False
 enforce_te_thickness = False
 min_te_thickness = 1e-3
-round_te = True
+round_te = False
 left_handed = False
 
 """ FLUID PROPERTIES """
@@ -48,7 +49,7 @@ mu = atmo_data.dynamic_viscosity[0]     # Pa s (air)
 # c_sound = 1482                        # m/s (water)
 
 """ XFOIL PROPERTIES """
-N_crit = 6
+N_crit = 8
 alpha_min = -5
 alpha_max = 15
 dalpha = 1
@@ -59,9 +60,9 @@ permissible_stress = 56.6*9.81/0.004**2     # N/m^2
 # source: https://www.mytechfun.com/pla/prusa
 
 """ OPERATIONAL PROPERTIES """
-Omega = 530/60*2*np.pi     # rad/s angular velocity
+Omega = 5090/60*2*np.pi     # rad/s angular velocity
 V = 0                       # m/s inflow velocity at infinity
-feather = 5                 # degrees
+feather = 0                 # degrees
 
 n = Omega/(2*np.pi)         # rps
 J = V/(n*2*R)               # advance ratio
@@ -70,6 +71,7 @@ J = V/(n*2*R)               # advance ratio
 """ CALCULATION """
 prop = propeller(R, N_b, f"input/{filename}")
 prop.discretise(
+    r_R_0,
     N_spanwise, 'cosine', 'linear',
     N_chordwise, chordwise_interpolation,
     enforce_te_thickness, min_te_thickness
@@ -173,6 +175,7 @@ plt.plot(prop.r, aero_analysis.dTdr, linestyle='-', marker='x')
 plt.xlabel(r"$r (m)$")
 plt.ylabel(r"$dT/dr (N/m)$")
 plt.grid(True)
+plt.title('Thrust Distribution')
 fig.savefig("output/thrust_distribution.svg", format="svg",
             transparent=True, bbox_inches='tight')
 
@@ -182,6 +185,7 @@ plt.plot(prop.r, aero_analysis.dDdr, linestyle='-', marker='x')
 plt.xlabel(r"$r$ (m)")
 plt.ylabel(r"$dD/dr (N/m)$")
 plt.grid(True)
+plt.title('Drag Distribution')
 fig.savefig("output/drag_distribution.svg", format="svg",
             transparent=True, bbox_inches='tight')
 
