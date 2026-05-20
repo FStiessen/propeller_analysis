@@ -16,6 +16,9 @@ from src.dynamics import (
 from src.creategeometry import (
     create_geometry
 )
+from src.optimiser import (
+    propeller_optimiser
+)
 
 """ GENERAL PROPERTIES """
 N_spanwise = 20
@@ -26,12 +29,13 @@ N_W = 50
 chordwise_interpolation = 'cubic_spline'
 # chordwise_interpolation = 'linear'
 simple_polars = False
+optimisation = False
 
 """ GEOMETRICAL PROPERTIES """
-filename = "linear_prop.csv"
+filename = "simple_prop.csv"
 R = 0.254
 N_b = 3
-r_R_0 = 0.1
+r_R_0 = 0.2
 turbine_airfoil = False
 enforce_te_thickness = False
 min_te_thickness = 1e-3
@@ -49,20 +53,23 @@ mu = atmo_data.dynamic_viscosity[0]     # Pa s (air)
 # c_sound = 1482                        # m/s (water)
 
 """ XFOIL PROPERTIES """
-N_crit = 8
+N_crit = 3
 alpha_min = -5
 alpha_max = 15
 dalpha = 1
 
 """ MATERIAL PROPERTIES """
-rho_m = 1200                                # kg/m^3
+rho_m = 1                                # kg/m^3
 permissible_stress = 56.6*9.81/0.004**2     # N/m^2
 # source: https://www.mytechfun.com/pla/prusa
 
 """ OPERATIONAL PROPERTIES """
-Omega = 5090/60*2*np.pi     # rad/s angular velocity
-V = 0                       # m/s inflow velocity at infinity
+Omega = 5000/60*2*np.pi     # rad/s angular velocity
+V = 1e-2                       # m/s inflow velocity at infinity
 feather = 0                 # degrees
+#design_value = 66
+design_value = 500
+mode = 'power'
 
 n = Omega/(2*np.pi)         # rps
 J = V/(n*2*R)               # advance ratio
@@ -83,17 +90,15 @@ else:
     aero_analysis.generate_polars(
         alpha_min, alpha_max, dalpha, N_crit, turbine_airfoil
         )
-aero_analysis.method_ning()
 
-# prop.naca_airfoil('2412')
+if optimisation:
+    propeller_optimiser(prop, aero_analysis, mode, design_value)
+aero_analysis.chord = prop.c
+aero_analysis.pitch = prop.pitch
+aero_analysis.method_ning()
 
 dyn_analysis = dynamics(prop, aero_analysis, rho_m)
 max_stress = np.max(dyn_analysis.normal_stress)
-if geometry:
-    create_geometry(
-        prop, dyn_analysis, N_U, N_W, left_handed,
-        round_te, approximate_curves=True
-        )
 
 sigma = np.trapezoid(prop.c, prop.r)*prop.N_b/(np.pi*prop.R**2)
 print(f"Solidity: {sigma*100:.3f} %")
@@ -246,3 +251,9 @@ plt.ylabel(r"$shear stress$ (N/m^2)")
 plt.grid(True)
 fig.savefig("output/shear_stress.svg", format="svg",
             transparent=True, bbox_inches='tight')
+
+if geometry:
+    create_geometry(
+        prop, dyn_analysis, N_U, N_W, left_handed,
+        round_te, approximate_curves=True
+        )

@@ -181,8 +181,8 @@ class propeller:
                 return abs(A), np.array([Cx, Cy])
 
             area, centroid = airfoil_centroid(af_blended)
-            self.areas[idx_r] = area*self.c[idx_r]**2
-            self.centroids[idx_r] = centroid*self.c[idx_r]
+            self.areas[idx_r] = area
+            self.centroids[idx_r] = centroid
 
             filename = f"output/airfoils/af_{idx_r}.dat"
             np.savetxt(filename,

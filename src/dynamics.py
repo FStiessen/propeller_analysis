@@ -8,7 +8,7 @@ class dynamics:
         self.p_t = analysis.p_t
         self.r = propeller.r
         self.Omega = analysis.Omega
-        self.areas = propeller.areas
+        self.areas = propeller.areas*propeller.c**2
         self.m = propeller.areas*rho_m
 
         self.balance_blade()

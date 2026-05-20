@@ -11,6 +11,7 @@ SOURCES:
 [4] Drela, M. (1989). XFOIL: An analysis and design system for low Reynolds number airfoils [Computer software]. Massachusetts Institute of Technology. https://web.mit.edu/drela/Public/web/xfoil/
 """
 
+
 class bemt:
     def __init__(self, prop, V, Omega, feather, mu, rho, c_sound):
         self.R = prop.R
@@ -329,7 +330,7 @@ QUIT
             F_tip = 2/np.pi*np.arccos(np.exp(-f_tip))
             f_hub = self.N_b/2*(self.r[i] - self.r[0])/(self.r[i]*abs(np.sin(phi)))
             F_hub = 2/np.pi*np.arccos(np.exp(-f_hub))
-            return F_tip*F_hub
+            return F_tip
 
         def kappa(phi, i):
             c_n = c_n_fun(phi, i)

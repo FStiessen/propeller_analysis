@@ -23,6 +23,7 @@ class create_geometry:
         self.approximate_curves = approximate_curves
         self.round_te = round_te
         self.axial_offset = dynamics.z_blade/self.prop.R
+        self.sweep = -np.rad2deg(np.atan(dynamics.y_blade/dynamics.x_blade))
         self.N_U = N_U
         self.N_W = N_W
         shutil.copyfile(self.vsp_default, self.vsp_new)
@@ -59,9 +60,11 @@ class create_geometry:
             prop_id, 1, self.prop.r/self.prop.R,
             np.rad2deg(self.prop.pitch), self.curve_type
             )
-        Cx = self.prop.centroids[:, 0]/self.prop.R
-        Cy = self.prop.centroids[:, 1]/self.prop.R
-        tangential = -(Cx*np.cos(self.prop.pitch) + Cy*np.sin(self.prop.pitch))
+        Cx = self.prop.centroids[:, 0]*self.prop.c/self.prop.R
+        Cy = self.prop.centroids[:, 1]*self.prop.c/self.prop.R
+        tangential = -(
+            Cx*np.cos(self.prop.pitch) + Cy*np.sin(self.prop.pitch)
+            )
         axial = (
             Cy*np.cos(self.prop.pitch) - Cx*np.sin(self.prop.pitch) -
             self.axial_offset
@@ -71,6 +74,9 @@ class create_geometry:
             )
         vsp.SetPCurve(
             prop_id, 8, self.prop.r/self.prop.R, tangential, self.curve_type
+            )
+        vsp.SetPCurve(
+            prop_id, 4, self.prop.r/self.prop.R, self.sweep, self.curve_type
             )
         vsp.Update()
         # Approximate final blade characteritics curve with cubic splines
