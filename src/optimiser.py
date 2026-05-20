@@ -35,7 +35,7 @@ class propeller_optimiser:
                 data = analysis.af_polars_extrap[idx_r]
                 alpha_raw = data[:, 0]
                 C_l_raw = data[:, 1]
-                condition = (alpha_raw >= 1) & (alpha_raw < 20)
+                condition = (alpha_raw >= 0) & (alpha_raw < 20)
                 C_l_raw = np.where(condition, C_l_raw, np.nan)
                 C_d_raw = data[:, 2]
                 C_d_raw = np.where(condition, C_d_raw, np.nan)

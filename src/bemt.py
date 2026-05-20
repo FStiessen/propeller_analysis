@@ -45,7 +45,7 @@ class bemt:
             self.af_polars_extrap.append(extrapolated_polar_array)
 
     def generate_polars(
-            self, alpha_min, alpha_max, dalpha, N_crit, turbine_airfoil
+            self, alpha_min, alpha_max, dalpha, N_crit, turbine_airfoil, use_viscous
             ):
         # Usage of [4]
         airfoil_dir = os.path.join('output', 'airfoils')
@@ -96,21 +96,26 @@ class bemt:
             if os.path.exists(polar_path):
                 os.remove(polar_path)
 
+            viscous_block = ""
+            if use_viscous:
+                viscous_block = f"""VISC {Re}
+MACH {Mach}
+VPAR
+N {N_crit}
+
+"""
+
             input_script = f"""LOAD
 {af_path_xfoil}
 
 PANE
 OPER
-VISC
-{Re}
-MACH {Mach}
-VPAR
-N {N_crit}
-
-PACC
+{viscous_block}PACC
 {output_file_xfoil}.polar
 
 ASEQ {alpha_min} {alpha_max} {dalpha}
+
+PACC
 
 QUIT
 """
