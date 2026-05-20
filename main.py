@@ -35,7 +35,7 @@ N_W = 50
 
 """ GEOMETRICAL PROPERTIES """
 filename = "simple_prop.csv"
-R = 0.254
+R = 0.075
 N_b = 3
 r_R_0 = 0.2
 turbine_airfoil = False
@@ -47,27 +47,27 @@ left_handed = False
 """ FLUID PROPERTIES """
 altitude = 0                            # m
 atmo_data = Atmosphere(altitude)
-rho = atmo_data.density[0]              # kg/m^3 (air)
-c_sound = atmo_data.speed_of_sound[0]   # m/s (air)
-mu = atmo_data.dynamic_viscosity[0]     # Pa s (air)
-# mu = 1.0518e-3                        # Pa s (water)
-# rho = 1000                            # kg/m^3 (water)
-# c_sound = 1482                        # m/s (water)
+# rho = atmo_data.density[0]              # kg/m^3 (air)
+# c_sound = atmo_data.speed_of_sound[0]   # m/s (air)
+# mu = atmo_data.dynamic_viscosity[0]     # Pa s (air)
+mu = 1.0518e-3                        # Pa s (water)
+rho = 1000                            # kg/m^3 (water)
+c_sound = 1482                        # m/s (water)
 
 """ XFOIL PROPERTIES """
 N_crit = 3
-alpha_min = -10
+alpha_min = -15
 alpha_max = 15
 dalpha = 1
 
 """ MATERIAL PROPERTIES """
-rho_m = 1                                # kg/m^3
+rho_m = 1200                                # kg/m^3
 permissible_stress = 56.6*9.81/0.004**2     # N/m^2
 # source: https://www.mytechfun.com/pla/prusa
 
 """ OPERATIONAL PROPERTIES """
-Omega = 5000/60*2*np.pi     # rad/s angular velocity
-V = 10                       # m/s inflow velocity at infinity
+Omega = 1500/60*2*np.pi     # rad/s angular velocity
+V = 2.5                       # m/s inflow velocity at infinity
 feather = 0                 # degrees
 #design_value = 66
 design_value = 400
